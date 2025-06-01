@@ -1,8 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
 import json
 import os
+import csv
 
 TASKS_FILE = "tasks.json"
 DATE_FORMAT = "%Y-%m-%d"
@@ -133,6 +134,7 @@ class TodoApp:
         ttk.Button(btn_frame, text="Delete", command=self.delete_task).pack(side="left")
         ttk.Button(btn_frame, text="Archive", command=self.archive_task).pack(side="left")
         ttk.Button(btn_frame, text="Unarchive", command=self.unarchive_task).pack(side="left")
+        ttk.Button(btn_frame, text="Export to CSV", command=self.export_to_csv).pack(side="left")
         ttk.Button(btn_frame, text="Refresh", command=self.refresh_tasks).pack(side="right")
 
     def add_task(self):
@@ -194,6 +196,25 @@ class TodoApp:
         task_id = int(self.tree.item(sel[0])["values"][0])
         unarchive_task(task_id)
         self.refresh_tasks()
+
+    def export_to_csv(self):
+        tasks = load_tasks()
+        if not tasks:
+            messagebox.showinfo("Export", "No tasks to export.")
+            return
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv")],
+            title="Save tasks as CSV"
+        )
+        if not file_path:
+            return
+        with open(file_path, "w", newline="", encoding="utf-8") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=["id", "title", "due", "priority", "category", "note", "done", "created", "archived"])
+            writer.writeheader()
+            for task in tasks:
+                writer.writerow(task)
+        messagebox.showinfo("Export", f"Tasks exported to {file_path}")
 
     def refresh_tasks(self):
         for row in self.tree.get_children():
