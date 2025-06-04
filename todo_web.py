@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, redirect, url_for
+from flask import Flask, render_template_string, request, redirect, url_for, flash
 import json
 import os
 from datetime import datetime
@@ -80,8 +80,19 @@ def unarchive_task(task_id):
             break
     save_tasks(tasks)
 
+def sort_tasks(tasks):
+    def sort_key(task):
+        try:
+            due = datetime.strptime(task["due"], DATE_FORMAT)
+        except Exception:
+            due = datetime.max
+        priority_map = {"high": 0, "medium": 1, "low": 2}
+        return (task["archived"], task["done"], due, priority_map.get(task["priority"], 1))
+    return sorted(tasks, key=sort_key)
+
 # --- Flask Web App Setup ---
-app = Flask(__name__)  # ✅ Initialize Flask app
+app = Flask(__name__)
+app.secret_key = "change_this_secret"  # Needed for flash messages
 
 # --- HTML Template ---
 HTML = """
@@ -96,15 +107,43 @@ HTML = """
         th { background: #f0f0f0; }
         tr.done { text-decoration: line-through; color: #888; }
         .archived { background: #f9e6e6; }
+        .overdue { background: #ffe0e0; }
         .actions form { display: inline; }
         .add-form { margin-bottom: 20px; }
-        /* ✅ Added clean styling to improve UI */
+        .edit-form { margin-bottom: 20px; background: #f5f5f5; padding: 10px; }
     </style>
 </head>
 <body>
     <h1>To-Do List (Web)</h1>
-    
-    <!-- ✅ Task Creation Form -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul>
+        {% for message in messages %}
+          <li style="color: red;">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Edit Task Form -->
+    {% if edit_task %}
+    <form class="edit-form" method="post" action="{{ url_for('edit', task_id=edit_task.id) }}">
+        <strong>Edit Task:</strong>
+        <input name="title" value="{{ edit_task.title }}" required>
+        <input name="due" value="{{ edit_task.due }}">
+        <select name="priority">
+            <option value="low" {% if edit_task.priority == 'low' %}selected{% endif %}>Low</option>
+            <option value="medium" {% if edit_task.priority == 'medium' %}selected{% endif %}>Medium</option>
+            <option value="high" {% if edit_task.priority == 'high' %}selected{% endif %}>High</option>
+        </select>
+        <input name="category" value="{{ edit_task.category }}">
+        <input name="note" value="{{ edit_task.note }}">
+        <button type="submit">Save</button>
+        <a href="{{ url_for('index') }}">Cancel</a>
+    </form>
+    {% endif %}
+
+    <!-- Task Creation Form -->
     <form class="add-form" method="post" action="{{ url_for('add') }}">
         <input name="title" placeholder="Title" required>
         <input name="due" placeholder="Due (YYYY-MM-DD)">
@@ -118,14 +157,14 @@ HTML = """
         <button type="submit">Add Task</button>
     </form>
 
-    <!-- ✅ Task Display Table -->
+    <!-- Task Display Table -->
     <table>
         <tr>
             <th>Title</th><th>Due</th><th>Priority</th><th>Category</th><th>Note</th>
             <th>Done</th><th>Archived</th><th>Actions</th>
         </tr>
         {% for task in tasks %}
-        <tr class="{% if task.done %}done{% endif %} {% if task.archived %}archived{% endif %}">
+        <tr class="{% if task.done %}done{% endif %} {% if task.archived %}archived{% endif %} {% if not task.done and not task.archived and task.due and task.due != 'No due date' and task.due < now %}overdue{% endif %}">
             <td>{{ task.title }}</td>
             <td>{{ task.due }}</td>
             <td>{{ task.priority }}</td>
@@ -143,6 +182,7 @@ HTML = """
                 {% else %}
                 <form method="post" action="{{ url_for('unarchive', task_id=task.id) }}"><button>Unarchive</button></form>
                 {% endif %}
+                <form method="get" action="{{ url_for('edit', task_id=task.id) }}"><button>Edit</button></form>
             </td>
         </tr>
         {% endfor %}
@@ -154,12 +194,12 @@ HTML = """
 # --- Flask Routes ---
 @app.route("/", methods=["GET"])
 def index():
-    tasks = load_tasks()
-    return render_template_string(HTML, tasks=tasks)  # ✅ Render tasks in table
+    tasks = sort_tasks(load_tasks())
+    now = datetime.now().strftime(DATE_FORMAT)
+    return render_template_string(HTML, tasks=tasks, now=now, edit_task=None)
 
 @app.route("/add", methods=["POST"])
 def add():
-    # ✅ Fetch and sanitize input
     title = request.form.get("title", "").strip()
     due = request.form.get("due", "").strip() or "No due date"
     priority = request.form.get("priority", "medium")
@@ -167,7 +207,30 @@ def add():
     note = request.form.get("note", "")
     if title:
         add_task(title, due, priority, category, note)
+    else:
+        flash("Title is required.")
     return redirect(url_for("index"))
+
+@app.route("/edit/<int:task_id>", methods=["GET", "POST"])
+def edit(task_id):
+    tasks = load_tasks()
+    task = next((t for t in tasks if t["id"] == task_id), None)
+    if not task:
+        flash("Task not found.")
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        due = request.form.get("due", "").strip() or "No due date"
+        priority = request.form.get("priority", "medium")
+        category = request.form.get("category", "General")
+        note = request.form.get("note", "")
+        if title:
+            update_task(task_id, title, due, priority, category, note)
+            return redirect(url_for("index"))
+        else:
+            flash("Title is required.")
+    now = datetime.now().strftime(DATE_FORMAT)
+    return render_template_string(HTML, tasks=sort_tasks(tasks), now=now, edit_task=task)
 
 @app.route("/mark_done/<int:task_id>", methods=["POST"])
 def mark_done_route(task_id):
