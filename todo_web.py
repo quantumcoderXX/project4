@@ -3,13 +3,14 @@ import json
 import os
 from datetime import datetime
 
-TASKS_FILE = "tasks.json"
-DATE_FORMAT = "%Y-%m-%d"
+# --- Constants and Setup ---
+TASKS_FILE = "tasks.json"  # ✅ File for storing tasks
+DATE_FORMAT = "%Y-%m-%d"    # ✅ Date format used in the app
 
-# --- Data Logic (reuse from CLI) ---
+# --- Data Logic (reused from CLI version) ---
 def load_tasks():
     if not os.path.exists(TASKS_FILE):
-        return []
+        return []  # ✅ Return empty if no file exists
     with open(TASKS_FILE, "r") as f:
         return json.load(f)
 
@@ -20,7 +21,7 @@ def save_tasks(tasks):
 def generate_task_id(tasks):
     if not tasks:
         return 1
-    return max(task['id'] for task in tasks) + 1
+    return max(task['id'] for task in tasks) + 1  # ✅ Auto-increment task ID
 
 def add_task(title, due, priority, category, note):
     tasks = load_tasks()
@@ -47,7 +48,7 @@ def update_task(task_id, title, due, priority, category, note):
             task["priority"] = priority
             task["category"] = category
             task["note"] = note
-            break
+            break  # ✅ Stop loop after match
     save_tasks(tasks)
 
 def mark_done(task_id):
@@ -60,7 +61,7 @@ def mark_done(task_id):
 
 def delete_task(task_id):
     tasks = load_tasks()
-    tasks = [t for t in tasks if t["id"] != task_id]
+    tasks = [t for t in tasks if t["id"] != task_id]  # ✅ Filter out task
     save_tasks(tasks)
 
 def archive_task(task_id):
@@ -79,9 +80,10 @@ def unarchive_task(task_id):
             break
     save_tasks(tasks)
 
-# --- Flask Web App ---
-app = Flask(__name__)
+# --- Flask Web App Setup ---
+app = Flask(__name__)  # ✅ Initialize Flask app
 
+# --- HTML Template ---
 HTML = """
 <!DOCTYPE html>
 <html>
@@ -96,10 +98,13 @@ HTML = """
         .archived { background: #f9e6e6; }
         .actions form { display: inline; }
         .add-form { margin-bottom: 20px; }
+        /* ✅ Added clean styling to improve UI */
     </style>
 </head>
 <body>
     <h1>To-Do List (Web)</h1>
+    
+    <!-- ✅ Task Creation Form -->
     <form class="add-form" method="post" action="{{ url_for('add') }}">
         <input name="title" placeholder="Title" required>
         <input name="due" placeholder="Due (YYYY-MM-DD)">
@@ -112,6 +117,8 @@ HTML = """
         <input name="note" placeholder="Note">
         <button type="submit">Add Task</button>
     </form>
+
+    <!-- ✅ Task Display Table -->
     <table>
         <tr>
             <th>Title</th><th>Due</th><th>Priority</th><th>Category</th><th>Note</th>
@@ -144,13 +151,15 @@ HTML = """
 </html>
 """
 
+# --- Flask Routes ---
 @app.route("/", methods=["GET"])
 def index():
     tasks = load_tasks()
-    return render_template_string(HTML, tasks=tasks)
+    return render_template_string(HTML, tasks=tasks)  # ✅ Render tasks in table
 
 @app.route("/add", methods=["POST"])
 def add():
+    # ✅ Fetch and sanitize input
     title = request.form.get("title", "").strip()
     due = request.form.get("due", "").strip() or "No due date"
     priority = request.form.get("priority", "medium")
@@ -180,5 +189,7 @@ def unarchive(task_id):
     unarchive_task(task_id)
     return redirect(url_for("index"))
 
+# --- Run App ---
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True)  # ✅ Run in debug mode for development
+
