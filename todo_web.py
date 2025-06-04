@@ -1,23 +1,23 @@
+# ...existing code...
+
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash
 import json
+import hashlib
 import os
 from datetime import datetime
-
-import hashlib
-
 
 TASKS_FILE = "tasks.json"
 USERS_FILE = "users.json"
 DATE_FORMAT = "%Y-%m-%d"
-SECRET_KEY = "supersecretkey123"  # Change this in production
+SECRET_KEY = "supersecretkey123"
 
-# --- Data Logic (reuse from CLI) ---
+# --- Data Logic (reused from CLI version) ---
 def load_tasks():
     if not os.path.exists(TASKS_FILE):
         return []
     with open(TASKS_FILE, "r") as f:
         return json.load(f)
-# --- Data Logic (reuse from CLI) ---
+
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -105,6 +105,15 @@ def unarchive_task(task_id, username):
             break
     save_tasks(tasks)
 
+def sort_tasks(tasks):
+    def sort_key(task):
+        try:
+            due = datetime.strptime(task["due"], DATE_FORMAT)
+        except Exception:
+            due = datetime.max
+        priority_map = {"high": 0, "medium": 1, "low": 2}
+        return (task["archived"], task["done"], due, priority_map.get(task["priority"], 1))
+    return sorted(tasks, key=sort_key)
 
 # --- Flask Web App ---
 app = Flask(__name__)
@@ -337,7 +346,7 @@ HTML = """
             <th>Done</th><th>Archived</th><th>Actions</th>
         </tr>
         {% for task in tasks %}
-        <tr class="{% if task.done %}done{% endif %} {% if task.archived %}archived{% endif %}">
+        <tr class="{% if task.done %}done{% endif %} {% if task.archived %}archived{% endif %} {% if not task.done and not task.archived and task.due and task.due != 'No due date' and task.due < now %}overdue{% endif %}">
             <td>{{ task.title }}</td>
             <td>{{ task.due }}</td>
             <td>{{ task.priority }}</td>
@@ -357,6 +366,7 @@ HTML = """
                 {% else %}
                 <form method="post" action="{{ url_for('unarchive', task_id=task.id) }}"><button title="Unarchive"><i class="fa-solid fa-box-open"></i></button></form>
                 {% endif %}
+                <form method="get" action="{{ url_for('edit', task_id=task.id) }}"><button>Edit</button></form>
             </td>
         </tr>
         {% endfor %}
@@ -365,7 +375,6 @@ HTML = """
 </body>
 </html>
 """
-
 
 def login_required(f):
     from functools import wraps
@@ -390,7 +399,8 @@ def index():
     tasks = sorted(tasks, key=parse_due)
     if q:
         tasks = [t for t in tasks if q in t["title"].lower() or q in t.get("category", "").lower() or q in t.get("note", "").lower()]
-    return render_template_string(HTML, tasks=tasks, q=q, edit_task=None, session=session)
+    now = datetime.now().strftime(DATE_FORMAT)
+    return render_template_string(HTML, tasks=tasks, q=q, edit_task=None, session=session, now=now)
 
 @app.route("/add", methods=["POST"])
 @login_required
@@ -424,7 +434,8 @@ def edit(task_id):
     tasks = sorted(tasks, key=parse_due)
     if q:
         tasks = [t for t in tasks if q in t["title"].lower() or q in t.get("category", "").lower() or q in t.get("note", "").lower()]
-    return render_template_string(HTML, tasks=tasks, q=q, edit_task=edit_task, session=session)
+    now = datetime.now().strftime(DATE_FORMAT)
+    return render_template_string(HTML, tasks=tasks, q=q, edit_task=edit_task, session=session, now=now)
 
 @app.route("/mark_done/<int:task_id>", methods=["POST"])
 @login_required
@@ -453,7 +464,6 @@ def unarchive(task_id):
     username = session['username']
     unarchive_task(task_id, username)
     return redirect(url_for("index"))
-
 
 # --- Authentication Routes ---
 @app.route("/login", methods=["GET", "POST"])
@@ -501,3 +511,4 @@ def logout():
 
 if __name__ == "__main__":
     app.run(debug=True)
+# ...existing code...
